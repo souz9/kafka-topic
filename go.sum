@@ -1,0 +1,10 @@
+github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/golang/snappy v0.0.1 h1:Qgr9rKW7uDUkrbSmQeiDsGa8SjGyCOGtuasMWwvp2P4=
+github.com/golang/snappy v0.0.1/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
+github.com/optiopay/kafka v2.0.5+incompatible h1:ka5l2o9tSkbDTZ9JbzXqRDG6aZhgOxbVp1M4QDlYGfk=
+github.com/optiopay/kafka v2.0.5+incompatible/go.mod h1:+j8QXtnwphDeotPJadizkD7zY32Aa0/017iz+r4ToEQ=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/souz9/bpool v0.0.0-20190410140506-bddefa49f99b h1:KpCdxDMgOhfDroB6T8MRnnYRjUZf1BUdBRDzoq4k6v4=
+github.com/souz9/bpool v0.0.0-20190410140506-bddefa49f99b/go.mod h1:a6xQ+i2BlHeXsQNc3bXnZ6D1fVonjPSiq9ZOrwDY/JY=
+github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
