@@ -10,40 +10,52 @@ import (
 )
 
 var (
-	ErrDropped = errors.New("message was dropped")
+	ErrDropped = errors.New("too many messages in a queue, dropped")
 
 	buffers = bpool.Pool{}
 )
 
 // TopicWriter is a topic writer. Implements io.Writer.
 type TopicWriter struct {
-	queue chan<- *bpool.Buffer
+	topic   string
+	queue   chan *bpool.Buffer
+	onError func(error)
 }
 
 // WriteTopic returns a new topic writer.
 func (nodes BrokerNodes) WriteTopic(topic string, writers, queueSize int) (*TopicWriter, error) {
-	brokerConf := kafka.NewBrokerConf("kafka-topic-writer")
+	w := &TopicWriter{
+		topic: topic,
+		queue: make(chan *bpool.Buffer, writers+queueSize),
+	}
+
+	brokerConf := kafka.NewBrokerConf("kafka-topic")
 
 	producerConf := kafka.NewProducerConf()
 	producerConf.RetryLimit = 3
 	producerConf.Compression = proto.CompressionSnappy
 	producerConf.RequiredAcks = proto.RequiredAcksLocal
 
-	queue := make(chan *bpool.Buffer, writers+queueSize)
-
 	for n := 0; n < writers; n++ {
 		broker, err := kafka.Dial(nodes, brokerConf)
 		if err != nil {
-			return nil, fmt.Errorf("kafka.Dial(%v): %v", nodes, err)
+			return nil, fmt.Errorf("kafka.Dial: %v", err)
 		}
 		producer := broker.Producer(producerConf)
 
-		go writer(broker, producer, topic, queue)
+		go w.writer(broker, producer)
 	}
-	return &TopicWriter{queue}, nil
+	return w, nil
+}
+
+// OnError sets the handler function that will be called if a error
+// occurs while write to the broker.
+func (w *TopicWriter) OnError(handler func(error)) {
+	w.onError = handler
 }
 
 // Write writes data to the topic.
+// Actual writing to broker happens asynchronously, see OnError method.
 func (w *TopicWriter) Write(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, nil
@@ -62,26 +74,22 @@ func (w *TopicWriter) Write(data []byte) (int, error) {
 	}
 }
 
-func writer(
-	broker *kafka.Broker,
-	producer kafka.Producer,
-	topic string,
-	queue <-chan *bpool.Buffer,
-) {
+func (w *TopicWriter) writer(broker *kafka.Broker, producer kafka.Producer) {
 	m := proto.Message{}
 
-	for buf := range queue {
+	for buf := range w.queue {
 		// broker returns 0 for partition if an error occurs,
 		// so the message will be written to there
-		p, _ := broker.PartitionCount(topic)
+		p, _ := broker.PartitionCount(w.topic)
 		// Pick random partition as to provide write balancing
 		if p > 0 {
 			p = rand.Int31n(p)
 		}
 
 		m.Value = buf.B
-		if _, err := producer.Produce(topic, p, &m); err != nil {
-			Logger.Errorf("kafka.Produce(%v): %v", topic, err)
+		_, err := producer.Produce(w.topic, p, &m)
+		if err != nil && w.onError != nil {
+			w.onError(fmt.Errorf("kafka.Produce: %v", err))
 		}
 
 		buffers.Put(buf)
