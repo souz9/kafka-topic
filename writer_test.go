@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-var brokerNodes = BrokerNodes{"127.0.0.1:9092"}
+var brokerNodes = []string{"127.0.0.1:9092"}
 
 type topicReader struct{ kafka.Consumer }
 
-func (nodes BrokerNodes) readTopic(t *testing.T, topic string) topicReader {
-	broker, err := kafka.Dial(nodes, kafka.NewBrokerConf("kafka"))
+func readTopic(t *testing.T, brokerNodes []string, topic string) topicReader {
+	broker, err := kafka.Dial(brokerNodes, kafka.NewBrokerConf("kafka"))
 	require.NoError(t, err)
 
 	conf := kafka.NewConsumerConf(topic, 0)
@@ -46,10 +46,10 @@ func (r topicReader) ReadWait(t *testing.T) []byte {
 func TestWriter(t *testing.T) {
 	const queueSize = 10
 
-	w, err := brokerNodes.WriteTopic("test", 1, queueSize)
+	w, err := Write(brokerNodes, "test", 1, queueSize)
 	require.NoError(t, err)
 
-	r := brokerNodes.readTopic(t, "test")
+	r := readTopic(t, brokerNodes, "test")
 
 	t.Run("should write messages", func(t *testing.T) {
 		w.Write([]byte("one"))

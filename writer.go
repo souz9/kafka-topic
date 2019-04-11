@@ -15,16 +15,16 @@ var (
 	buffers = bpool.Pool{}
 )
 
-// TopicWriter is a topic writer. Implements io.Writer.
-type TopicWriter struct {
+// Writer is a topic writer. Implements io.Writer.
+type Writer struct {
 	topic   string
 	queue   chan *bpool.Buffer
 	onError func(error)
 }
 
-// WriteTopic returns a new topic writer.
-func (nodes BrokerNodes) WriteTopic(topic string, writers, queueSize int) (*TopicWriter, error) {
-	w := &TopicWriter{
+// Write returns a new topic writer.
+func Write(brokerNodes []string, topic string, writers, queueSize int) (*Writer, error) {
+	w := &Writer{
 		topic: topic,
 		queue: make(chan *bpool.Buffer, writers+queueSize),
 	}
@@ -37,7 +37,7 @@ func (nodes BrokerNodes) WriteTopic(topic string, writers, queueSize int) (*Topi
 	producerConf.RequiredAcks = proto.RequiredAcksLocal
 
 	for n := 0; n < writers; n++ {
-		broker, err := kafka.Dial(nodes, brokerConf)
+		broker, err := kafka.Dial(brokerNodes, brokerConf)
 		if err != nil {
 			return nil, fmt.Errorf("kafka.Dial: %v", err)
 		}
@@ -50,13 +50,13 @@ func (nodes BrokerNodes) WriteTopic(topic string, writers, queueSize int) (*Topi
 
 // OnError sets the handler function that will be called if a error
 // occurs while write to the broker.
-func (w *TopicWriter) OnError(handler func(error)) {
+func (w *Writer) OnError(handler func(error)) {
 	w.onError = handler
 }
 
 // Write writes data to the topic.
-// Actual writing to broker happens asynchronously, see OnError method.
-func (w *TopicWriter) Write(data []byte) (int, error) {
+// Actual writing to a broker happens asynchronously, see OnError method.
+func (w *Writer) Write(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, nil
 	}
@@ -74,7 +74,7 @@ func (w *TopicWriter) Write(data []byte) (int, error) {
 	}
 }
 
-func (w *TopicWriter) writer(broker *kafka.Broker, producer kafka.Producer) {
+func (w *Writer) writer(broker *kafka.Broker, producer kafka.Producer) {
 	m := proto.Message{}
 
 	for buf := range w.queue {
