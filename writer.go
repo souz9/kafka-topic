@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/snappy"
 	"github.com/souz9/bpool"
@@ -17,6 +18,7 @@ var (
 
 // Writer is a topic writer. Implements io.Writer.
 type Writer struct {
+	topic   string
 	queue   chan *bpool.Buffer
 	onError func(error)
 }
@@ -24,7 +26,9 @@ type Writer struct {
 // Write returns a new topic writer.
 func Write(brokerNodes []string, topic string, writers, queueSize int) *Writer {
 	w := &Writer{
-		queue: make(chan *bpool.Buffer, writers+queueSize)}
+		topic: topic,
+		queue: make(chan *bpool.Buffer, writers+queueSize),
+	}
 
 	producerConfig := kafka.WriterConfig{
 		Brokers:          brokerNodes,
@@ -61,20 +65,26 @@ func (w *Writer) Write(data []byte) (int, error) {
 
 	select {
 	case w.queue <- buf:
+		MetricQueued.WithLabelValues(w.topic).Inc()
 		return len(data), nil
 	default:
+		MetricDropped.WithLabelValues(w.topic).Inc()
 		return 0, ErrDropped
 	}
 }
 
 func (w *Writer) writer(producer *kafka.Writer) {
 	for buf := range w.queue {
+		t := prometheus.NewTimer(MetricWriteDuration.WithLabelValues(w.topic))
 		err := producer.WriteMessages(
 			context.Background(), kafka.Message{Value: buf.B})
+		t.ObserveDuration()
+
 		if err != nil && w.onError != nil {
 			w.onError(fmt.Errorf("produce: %v", err))
 		}
 
 		buffers.Put(buf)
+		MetricQueued.WithLabelValues(w.topic).Dec()
 	}
 }

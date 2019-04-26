@@ -6,6 +6,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
+	github.com/prometheus/client_golang v0.9.2
 	github.com/segmentio/kafka-go v0.2.2
 	github.com/souz9/bpool v0.1.0
 	github.com/stretchr/testify v1.3.0
