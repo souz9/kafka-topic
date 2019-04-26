@@ -1,12 +1,12 @@
 package ktopic
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/optiopay/kafka"
-	"github.com/optiopay/kafka/proto"
+	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/snappy"
 	"github.com/souz9/bpool"
-	"math/rand"
 )
 
 var (
@@ -17,35 +17,28 @@ var (
 
 // Writer is a topic writer. Implements io.Writer.
 type Writer struct {
-	topic   string
 	queue   chan *bpool.Buffer
 	onError func(error)
 }
 
 // Write returns a new topic writer.
-func Write(brokerNodes []string, topic string, writers, queueSize int) (*Writer, error) {
+func Write(brokerNodes []string, topic string, writers, queueSize int) *Writer {
 	w := &Writer{
-		topic: topic,
-		queue: make(chan *bpool.Buffer, writers+queueSize),
+		queue: make(chan *bpool.Buffer, writers+queueSize)}
+
+	producerConfig := kafka.WriterConfig{
+		Brokers:          brokerNodes,
+		Topic:            topic,
+		RequiredAcks:     1,
+		BatchSize:        1,
+		CompressionCodec: snappy.NewCompressionCodec(),
 	}
-
-	brokerConf := kafka.NewBrokerConf("kafka-topic")
-
-	producerConf := kafka.NewProducerConf()
-	producerConf.RetryLimit = 3
-	producerConf.Compression = proto.CompressionSnappy
-	producerConf.RequiredAcks = proto.RequiredAcksLocal
 
 	for n := 0; n < writers; n++ {
-		broker, err := kafka.Dial(brokerNodes, brokerConf)
-		if err != nil {
-			return nil, fmt.Errorf("kafka.Dial: %v", err)
-		}
-		producer := broker.Producer(producerConf)
-
-		go w.writer(broker, producer)
+		producer := kafka.NewWriter(producerConfig)
+		go w.writer(producer)
 	}
-	return w, nil
+	return w
 }
 
 // OnError sets the handler function that will be called if a error
@@ -74,22 +67,12 @@ func (w *Writer) Write(data []byte) (int, error) {
 	}
 }
 
-func (w *Writer) writer(broker *kafka.Broker, producer kafka.Producer) {
-	m := proto.Message{}
-
+func (w *Writer) writer(producer *kafka.Writer) {
 	for buf := range w.queue {
-		// broker returns 0 for partition if an error occurs,
-		// so the message will be written to there
-		p, _ := broker.PartitionCount(w.topic)
-		// Pick random partition as to provide write balancing
-		if p > 0 {
-			p = rand.Int31n(p)
-		}
-
-		m.Value = buf.B
-		_, err := producer.Produce(w.topic, p, &m)
+		err := producer.WriteMessages(
+			context.Background(), kafka.Message{Value: buf.B})
 		if err != nil && w.onError != nil {
-			w.onError(fmt.Errorf("kafka.Produce: %v", err))
+			w.onError(fmt.Errorf("produce: %v", err))
 		}
 
 		buffers.Put(buf)

@@ -1,61 +1,62 @@
 package ktopic
 
 import (
-	"github.com/optiopay/kafka"
+	"context"
+	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"runtime"
+	"strconv"
 	"testing"
 	"time"
 )
 
 var brokerNodes = []string{"127.0.0.1:9092"}
 
-type topicReader struct{ kafka.Consumer }
+type topicReader struct{ r *kafka.Reader }
 
 func readTopic(t *testing.T, brokerNodes []string, topic string) topicReader {
-	broker, err := kafka.Dial(brokerNodes, kafka.NewBrokerConf("kafka"))
+	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:   brokerNodes,
+		Topic:     topic,
+		Partition: 0,
+		MaxWait:   100 * time.Millisecond,
+	})
+
+	err := reader.SetOffset(kafka.LastOffset)
 	require.NoError(t, err)
 
-	conf := kafka.NewConsumerConf(topic, 0)
-	conf.StartOffset = kafka.StartOffsetNewest
-	conf.RetryLimit = 1
-	cons, err := broker.Consumer(conf)
-	require.NoError(t, err)
-
-	return topicReader{cons}
+	return topicReader{r: reader}
 }
 
-func (r topicReader) ReadWait(t *testing.T) []byte {
-	start := time.Now()
-	for time.Since(start) < time.Second {
-		m, err := r.Consume()
-		if err == kafka.ErrNoData {
-			runtime.Gosched()
-			continue
-		}
-		if err != nil {
-			assert.FailNow(t, err.Error())
-		}
-		return m.Value
-	}
-	assert.FailNow(t, "timeout")
-	return nil
+func (r topicReader) Read(t *testing.T) []byte {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	m, err := r.r.ReadMessage(ctx)
+	require.NoError(t, err)
+
+	return m.Value
 }
 
 func TestWriter(t *testing.T) {
 	const queueSize = 10
 
-	w, err := Write(brokerNodes, "test", 1, queueSize)
-	require.NoError(t, err)
-
 	r := readTopic(t, brokerNodes, "test")
 
+	w := Write(brokerNodes, "test", 1, queueSize)
+	w.OnError(func(err error) {
+		assert.NoError(t, err)
+	})
+
 	t.Run("should write messages", func(t *testing.T) {
-		w.Write([]byte("one"))
-		w.Write([]byte("two"))
-		assert.Equal(t, []byte("one"), r.ReadWait(t))
-		assert.Equal(t, []byte("two"), r.ReadWait(t))
+		ts := time.Now().UnixNano()
+		a := strconv.FormatInt(ts, 10)
+		b := strconv.FormatInt(ts+1, 10)
+
+		w.Write([]byte(a))
+		w.Write([]byte(b))
+		assert.Equal(t, []byte(a), r.Read(t))
+		assert.Equal(t, []byte(b), r.Read(t))
 	})
 
 	t.Run("should drop messages if write too quickly", func(t *testing.T) {
