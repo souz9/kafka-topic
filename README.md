@@ -1,3 +1,3 @@
 # kafka-topic
 
-Writer to Kafka topics
+io.Writer to Kafka topics.
