@@ -1,4 +1,4 @@
-module gitlab.bidease.com/souz9/kafka-topic
+module github.com/souz9/kafka-topic
 
 go 1.12
 
