@@ -35,6 +35,7 @@ func Write(brokerNodes []string, topic string, writers, queueSize int) *Writer {
 		Topic:            topic,
 		RequiredAcks:     1,
 		BatchSize:        1,
+		BatchBytes:       100 << 20, // 100 MB
 		CompressionCodec: snappy.NewCompressionCodec(),
 	}
 
